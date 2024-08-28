@@ -1,0 +1,60 @@
+div[data-testid="stVerticalBlockBorderWrapper"]:has(>div>div>div[data-testid="element-container"] .paper) {
+    background-color: #fff;
+    border: 1px solid #dfe0f8;
+    border-radius: 10px;
+}
+
+/* Áp dụng style cho dark theme */
+/* @media (prefers-color-scheme: dark) {
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(>div>div>div[data-testid="element-container"] .paper) {
+        background-color: #333;
+        border: 1px solid #555;
+        border-radius: 10px;
+    }
+} */
+
+div[data-baseweb="select"] {
+    border: 1px solid #dfe0f8;
+    border-radius: 10px;
+}
+
+div[data-testid="stButton"]>button {
+    background-color: #2545d3;
+    color: white;
+    border-radius: 5px;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+div[data-testid="stMarkdownContainer"]>hr {
+    margin: 0px;
+}
+
+#root > div:nth-child(1) > div.withScreencast > div > div > div > section.st-emotion-cache-1o14730.eczjsme11 > div.st-emotion-cache-6qob1r.eczjsme3 > div.st-emotion-cache-16txtl3.eczjsme4 > div > div > div > div > div > div > div > div:nth-child(2) > div > label > div > p{
+    color: #2545d3;
+}
+
+#root > div:nth-child(1) > div.withScreencast > div > div > div > section.st-emotion-cache-1o14730.eczjsme11 > div.st-emotion-cache-6qob1r.eczjsme3 > div.st-emotion-cache-16txtl3.eczjsme4 > div > div > div > div > div > div > div > div:nth-child(8) > div > div > div:nth-child(3) > div > label {
+    pointer-events: none;
+}
+
+button:has(div[data-testid="stVerticalBlockBorderWrapper"]:has(>div>div>div[data-testid="element-container"] .paper)>div>div>div[data-testid="element-container"]>div>but){
+    background-color: #2545d3;
+    color: #fff;
+    transition: background-color .3s ease;
+    width: 100%;
+    border-radius: 50px;
+}
+#root > div:nth-child(1) > div.withScreencast > div > div > div > section.st-emotion-cache-1o14730.eczjsme11 > div.st-emotion-cache-6qob1r.eczjsme3 > div.st-emotion-cache-16txtl3.eczjsme4 > div > div > div > div > div > div > div > div:nth-child(9) > div > div > div > div > button:hover{
+    background-color: #1e37a9;
+}
+
+div[data-testid="stVerticalBlockBorderWrapper"]:has(>div>div>div[data-testid="element-container"] .toggle-container) {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+div[data-testid="stVerticalBlockBorderWrapper"]:has(>div>div>div[data-testid="element-container"] .submit-container) {
+    border-top: 1px solid #e3e8ef;
+}
+
