@@ -18,7 +18,7 @@ def fetch_data(audio_str,
                entity_detection
                ):
     response = requests.post(
-        f"{API_URL}", 
+        f"{API_URL}/parse", 
         json={
             "audio_url": audio_str,
             "pii_redaction": pii_redaction,
