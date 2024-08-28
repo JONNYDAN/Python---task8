@@ -10,9 +10,9 @@ def fetch_data(audio_str,
                model_type,
                language_code
                ):
-    response = requests.get(
+    response = requests.post(
         f"{API_URL}", 
-        params={
+        json={
             "audio_url": audio_str,
             "pii_redaction": pii_redaction,
             "speaker_labels": speaker_labels,
@@ -45,28 +45,37 @@ def fetch_data_options(audio_str,
                        sentiment_analysis,
                        entity_detection
                        ):
-    response = requests.get(
-        f"{API_URL}parse",
-        params={
-            "audio_url": audio_str,
-            "summarization": summarization,
-            "iab_categories": iab_categories,
-            "auto_chapters": auto_chapters,
-            "content_safety": content_safety,
-            "auto_highlights": auto_highlights,
-            "sentiment_analysis": sentiment_analysis,
-            "entity_detection": entity_detection
-        }
+    payload = {
+        "audio_url": audio_str,
+        "summarization": summarization,
+        "iab_categories": iab_categories,
+        "auto_chapters": auto_chapters,
+        "content_safety": content_safety,
+        "auto_highlights": auto_highlights,
+        "sentiment_analysis": sentiment_analysis,
+        "entity_detection": entity_detection
+    }
+    
+    print(f"Sending request with payload: {payload}")
+    
+    response = requests.post(
+        f"{API_URL}/parse",
+        json=payload
     )
     
     try:
         response.raise_for_status()
         data = response.json()
         return data, None
+    except requests.exceptions.HTTPError as http_err:
+        return None, f"HTTP error occurred: {http_err}"
     except Exception as err:
-        return None, err
+        return None, f"Other error occurred: {err}"
 
 def get_transcript_options(data, option):
-    # Extract transcript from the data dictionary
+    if data is None:
+        return "No data available."
+    
+    # Sử dụng phương thức get để tránh lỗi KeyError
     transcript = data.get(option, "No options available.")
     return transcript

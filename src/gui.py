@@ -162,7 +162,7 @@ with st.container():
                                    model_type,
                                    language_code
                                    )
-            data_options, err = fetch_data_options(file_url, 
+            data_options, err_options  = fetch_data_options(file_url, 
                                                    activated_sum, 
                                                    activated_topic, 
                                                    activated_auto_chapters, 
@@ -171,6 +171,12 @@ with st.container():
                                                    activated_sentiment,
                                                    activated_entity
                                                    )
+            
+            if err:
+                st.error(f"Error fetching data: {err}")
+            
+            if err_options:
+                st.error(f"Error fetching data options: {err_options}")
             
             with left_paper:
                 
