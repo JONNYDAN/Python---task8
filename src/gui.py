@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from execute import fetch_data, get_transcript, fetch_data_options, get_transcript_options
+from execute import fetch_data, get_transcript, get_transcript_options
 import tempfile
     
 
@@ -15,13 +15,6 @@ with open('styles.css', 'r', encoding='utf-8') as f:
     css = f.read()
 
 st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
-
-# Directory to save uploaded files
-UPLOAD_DIRECTORY = "media/"
-
-# Ensure the upload directory exists
-if not os.path.exists(UPLOAD_DIRECTORY):
-    os.makedirs(UPLOAD_DIRECTORY)
 
 with st.sidebar:
     with st.container(border=True):
@@ -160,24 +153,15 @@ with st.container():
                                    activated_dual,
                                    activated_filter,
                                    model_type,
-                                   language_code
+                                   language_code,
+                                   activated_sum, 
+                                    activated_topic, 
+                                    activated_auto_chapters, 
+                                    activated_content, 
+                                    activated_phrases,
+                                    activated_sentiment,
+                                    activated_entity
                                    )
-            data_options, err_options  = fetch_data_options(file_url, 
-                                                   activated_sum, 
-                                                   activated_topic, 
-                                                   activated_auto_chapters, 
-                                                   activated_content, 
-                                                   activated_phrases,
-                                                   activated_sentiment,
-                                                   activated_entity
-                                                   )
-            
-            if err:
-                st.error(f"Error fetching data: {err}")
-            
-            if err_options:
-                st.error(f"Error fetching data options: {err_options}")
-            
             with left_paper:
                 
                 st.divider()
@@ -192,31 +176,31 @@ with st.container():
                     
             with right_paper:
                 if activated_sum is not False:
-                    summary = get_transcript_options(data_options, "summary")
+                    summary = get_transcript_options(data, "summary")
                     with st.status("Summarization"):
                         st.write(summary)
                 if activated_topic is not False:
-                    topics = get_transcript_options(data_options, "topic")
+                    topics = get_transcript_options(data, "topic")
                     with st.status("Topic Detection"):
                         st.write(topics)
                 if activated_auto_chapters is not False:
-                    chapters = get_transcript_options(data_options, "chapter")
+                    chapters = get_transcript_options(data, "chapter")
                     with st.status("Auto Chapters"):
                         st.write(chapters)
                 if activated_content is not False:
-                    content = get_transcript_options(data_options, "content")
+                    content = get_transcript_options(data, "content")
                     with st.status("Content Moderation"):
                         st.write(content)
                 if activated_phrases is not False:
-                    phrases = get_transcript_options(data_options, "phrases")
+                    phrases = get_transcript_options(data, "phrases")
                     with st.status("Content Moderation"):
                         st.write(phrases)
                 if activated_sentiment is not False:
-                    sentiment = get_transcript_options(data_options, "sentiment")
+                    sentiment = get_transcript_options(data, "sentiment")
                     with st.status("Sentiment Analysis"):
                         st.write(sentiment)
                 if activated_entity is not False:
-                    entity = get_transcript_options(data_options, "entity")
+                    entity = get_transcript_options(data, "entity")
                     with st.status("Entity Detection"):
                         st.write(entity)
                     
