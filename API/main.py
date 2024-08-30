@@ -2,11 +2,13 @@ import assemblyai as aai
 from fastapi import FastAPI, HTTPException
 from model import TranscriptionRequest
 from lib import generate_config_from_request, generate_response
+from starlette.staticfiles import StaticFiles
 app = FastAPI()
 
 aai.settings.api_key = "edd915cdc8014f9db7190b8a38c0ff28"
 headers = {"authorization": "edd915cdc8014f9db7190b8a38c0ff28"}
 
+app.mount("/temp", StaticFiles(directory="temp"), name="static")
 
 @app.post("/parse")
 async def parse(request: TranscriptionRequest):

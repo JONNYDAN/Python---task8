@@ -298,7 +298,7 @@ with st.container():
                         full_html = f"""
                         {custom_css}
                         <audio controls>
-                        <source src="{uploaded_file}" type="audio/wav">
+                        <source src="{file_url}" type="audio/wav">
                         Your browser does not support the audio element.
                         </audio>
                         <div class="container-transcript" style="font-size: 18px;">
