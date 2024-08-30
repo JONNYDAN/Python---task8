@@ -58,3 +58,18 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(>div>div>div[data-testid="el
     border-top: 1px solid #e3e8ef;
 }
 
+.word {
+    position: relative;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background-color 0.1s ease;
+    display: inline-block;
+}
+.highlight {
+    background-color: #2545d3;
+    color: white;
+}
+.container-transcript{
+    max-height : 600px;
+    overflow-y: auto;
+}

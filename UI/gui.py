@@ -9,6 +9,71 @@ def save_uploaded_file(uploaded_file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
         tmp_file.write(uploaded_file.read())
         return tmp_file.name
+    
+def generate_transcript_html(transcript_words):
+    html = '<div>'
+    html += ''
+    for word_data in transcript_words:
+        html += f'<span id="word-{word_data["start"]/1000}" class="word">{word_data["text"]} </span>'
+    html += '</div>'
+    return html
+
+custom_css = """
+<style>
+.word {
+    position: relative;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background-color 0.1s ease;
+    display: inline-block;
+}
+.highlight {
+    background-color: #2545d3;
+    color: white;
+}
+.container-transcript{
+    max-height : 600px;
+    overflow-y: auto;
+}
+</style>
+"""
+
+# Add JavaScript to handle audio playback and highlight the current word
+custom_js = """
+<script>
+console.log("abc")
+function highlightCurrentWord(audio) {
+    const words = document.querySelectorAll('.word');
+    let currentWordIndex = 0;
+
+    audio.addEventListener('timeupdate', () => {
+        const currentTime = audio.currentTime;
+        console.log(currentTime);
+        // Remove highlight from all words
+        words.forEach(word => word.classList.remove('highlight'));
+
+        // Highlight the current word
+        for (let i = 0; i < words.length; i++) {
+            const wordElement = words[i];
+            const startTime = parseFloat(wordElement.id.split('-')[1]);
+            const endTime = (i < words.length - 1) ? parseFloat(words[i + 1].id.split('-')[1]) : audio.duration;
+
+            if (currentTime >= startTime && currentTime < endTime) {
+                wordElement.classList.add('highlight');
+                break;
+            }
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const audio = document.getElementsByTagName("audio");
+    console.log("123")
+    console.log(audio[0])
+    highlightCurrentWord(audio[0]);
+});
+</script>
+"""
 
 st.set_page_config(page_title="Streamline Analyst", page_icon=":rocket:", layout="wide")
 with open('styles.css', 'r', encoding='utf-8') as f:
@@ -140,11 +205,24 @@ with st.sidebar:
             st.write('<div class="submit-container">', unsafe_allow_html=True)
             submit_button = st.button("Transcribe File", disabled=uploaded_file is None)
             st.write('</div>', unsafe_allow_html=True)
+
 # Main section
 with st.container():
     if submit_button and uploaded_file is not None:
-        left_paper, right_paper = st.columns([7, 3])
-        with st.spinner('Processing...'):
+        # Determine column layout based on selected options
+        optional_selected = [activated_sum, activated_topic, activated_auto_chapters, activated_content,
+                             activated_phrases, activated_sentiment, activated_entity, activated_pii, 
+                             activated_speaker, activated_dual, activated_filter]
+        
+        if any(optional_selected):
+            # If any of the optional capabilities are selected except for the specific ones
+            left_paper, right_paper = st.columns([7, 3])
+        else:
+            # Default layout
+            left_paper = st.container()
+            right_paper = None
+        
+        with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
             
             file_url = save_uploaded_file(uploaded_file)
             data, err = fetch_data(file_url,
@@ -155,54 +233,81 @@ with st.container():
                                    model_type,
                                    language_code,
                                    activated_sum, 
-                                    activated_topic, 
-                                    activated_auto_chapters, 
-                                    activated_content, 
-                                    activated_phrases,
-                                    activated_sentiment,
-                                    activated_entity
+                                   activated_topic, 
+                                   activated_auto_chapters, 
+                                   activated_content, 
+                                   activated_phrases,
+                                   activated_sentiment,
+                                   activated_entity
                                    )
-            with left_paper:
-                
-                st.divider()
-                st.audio(uploaded_file, format="audio/mpeg")
-                st.divider()
-
-                if data:
-                    transcript = get_transcript(data)
-                    st.write(transcript)
-                else:
-                    st.error(f"Error fetching data: {err}")
+            print(data.get("transcript_words"))
+            
+            if right_paper:
+                with left_paper:
                     
-            with right_paper:
-                if activated_sum is not False:
-                    summary = get_transcript_options(data, "summary")
-                    with st.status("Summarization"):
-                        st.write(summary)
-                if activated_topic is not False:
-                    topics = get_transcript_options(data, "topic")
-                    with st.status("Topic Detection"):
-                        st.write(topics)
-                if activated_auto_chapters is not False:
-                    chapters = get_transcript_options(data, "chapter")
-                    with st.status("Auto Chapters"):
-                        st.write(chapters)
-                if activated_content is not False:
-                    content = get_transcript_options(data, "content")
-                    with st.status("Content Moderation"):
-                        st.write(content)
-                if activated_phrases is not False:
-                    phrases = get_transcript_options(data, "phrases")
-                    with st.status("Content Moderation"):
-                        st.write(phrases)
-                if activated_sentiment is not False:
-                    sentiment = get_transcript_options(data, "sentiment")
-                    with st.status("Sentiment Analysis"):
-                        st.write(sentiment)
-                if activated_entity is not False:
-                    entity = get_transcript_options(data, "entity")
-                    with st.status("Entity Detection"):
-                        st.write(entity)
+                    st.divider()
+                    st.audio(uploaded_file, format="audio/mpeg")
+                    st.divider()
+
+                    if data:
+                        transcript = get_transcript(data)
+                        st.write(transcript)
+                    else:
+                        st.error(f"Error fetching data: {err}")
+                        
+                with right_paper:
+                    if activated_sum:
+                        summary = get_transcript_options(data, "summary")
+                        with st.status("Summarization"):
+                            st.write(summary)
+                    if activated_topic:
+                        topics = get_transcript_options(data, "topic")
+                        with st.status("Topic Detection"):
+                            st.write(topics)
+                    if activated_auto_chapters:
+                        chapters = get_transcript_options(data, "chapter")
+                        with st.status("Auto Chapters"):
+                            st.write(chapters)
+                    if activated_content:
+                        content = get_transcript_options(data, "content")
+                        with st.status("Content Moderation"):
+                            st.write(content)
+                    if activated_phrases:
+                        phrases = get_transcript_options(data, "phrases")
+                        with st.status("Important Phrases"):
+                            st.write(phrases)
+                    if activated_sentiment:
+                        sentiment = get_transcript_options(data, "sentiment")
+                        with st.status("Sentiment Analysis"):
+                            st.write(sentiment)
+                    if activated_entity:
+                        entity = get_transcript_options(data, "entity")
+                        with st.status("Entity Detection"):
+                            st.write(entity)
+            else:
+                with left_paper:
+                    # st.divider()
+                    # st.audio(uploaded_file, format="audio/mpeg")
+                    # st.divider()
+
+                    if data:
+                        # transcript = get_transcript(data)
+                        # st.write(transcript)
+                        
+                        transcript_html = generate_transcript_html(data.get("transcript_words"))
+                        full_html = f"""
+                        {custom_css}
+                        <audio controls>
+                        <source src="{uploaded_file}" type="audio/wav">
+                        Your browser does not support the audio element.
+                        </audio>
+                        <div class="container-transcript" style="font-size: 18px;">
+                            {transcript_html}
+                        </div>
+                        {custom_js}
+                        """
+                        # Display the transcript in Streamlit
+                        st.components.v1.html(full_html, height=1000)
                     
     else:   
         st.write(
@@ -210,6 +315,3 @@ with st.container():
             unsafe_allow_html=True
         )
         st.write("Access production-ready Speech AI models for speech recognition, speaker detection, audio summarization, and more. Test our API yourself with a pre-loaded audio file, or upload your own.")
-
-
-                        

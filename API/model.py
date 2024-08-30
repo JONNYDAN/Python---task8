@@ -8,7 +8,7 @@ class TranscriptionRequest(BaseModel):
     speaker_labels: bool = False
     dual_channel: bool = False
     filter_profanity: bool = False
-    model_type: str = "nano"  # Default to 'nano'
+    model_type: str = "best"  # Default to 'best'
     language_code: str = "auto"  # Default to 'auto'
     summarization: bool = False
     iab_categories: bool = False

@@ -123,6 +123,7 @@ def generate_response(transcript: aai.Transcript, request: TranscriptionRequest)
     # Return the plain transcript with additional processing results
     return {
         "transcript": transcript_text,
+        "transcript_words": transcript.words,
         "summary": transcript.summary if request.summarization else "",
         "topic": topics_str if request.iab_categories else "",
         "chapter": chapter_str if request.auto_chapters else "",
