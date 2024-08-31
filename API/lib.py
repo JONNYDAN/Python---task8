@@ -64,7 +64,7 @@ def generate_response(transcript: aai.Transcript, request: TranscriptionRequest)
             if relevance > 0.8:
                 refined_topic = ' '.join(re.split('(?=[A-Z])', topic.split('>')[-1])).strip()
                 topics.append(refined_topic)
-        topics_str = " \n ".join(topics)
+        topics_str = "\n\n".join(topics)
 
     # Process auto chapters
     if request.auto_chapters:

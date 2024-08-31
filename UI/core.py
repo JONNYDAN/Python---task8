@@ -1,5 +1,6 @@
 import requests
 import streamlit as st
+import tempfile
 from constants import API_URL
 
 def fetch_data(audio_str,
@@ -44,7 +45,6 @@ def fetch_data(audio_str,
     except Exception as err:
         return None, err
 
-
 def get_transcript(data):
     # Extract transcript from the data dictionary
     transcript = data.get("transcript", "No transcript available.")
@@ -57,3 +57,28 @@ def get_transcript_options(data, option):
     # Sử dụng phương thức get để tránh lỗi KeyError
     transcript = data.get(option, "No options available.")
     return transcript
+
+def save_uploaded_file(uploaded_file):
+    """Save the uploaded file to a temporary file and return its path."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        return tmp_file.name
+    
+def generate_transcript_html(transcript_words):
+    html = '<div>'
+    for word_data in transcript_words:
+        start_time_sec = word_data["start"] / 1000
+        html += f'<span id="word-{start_time_sec}" class="word">{word_data["text"]} </span>'
+    html += '</div>'
+    return html
+
+def generate_transcript_html_speaker(utterance):
+    html = '<div>'
+    for speaker_data in utterance:
+        html += f'<p><b> Speaker {speaker_data["speaker"]} </b></p>'
+        for word_data in speaker_data["words"]:
+            start_time_sec = word_data["start"] / 1000
+            html += f'<span id="word-{start_time_sec}" class="word">{word_data["text"]} </span>'
+    html += '</div>'
+    return html
+

@@ -1,96 +1,143 @@
 import streamlit as st
 import os
-from execute import fetch_data, get_transcript, get_transcript_options
-import tempfile
+from core import fetch_data, get_transcript, get_transcript_options, save_uploaded_file, generate_transcript_html, generate_transcript_html_speaker
 from contextlib import nullcontext
 import threading
-from constants import API_URL
+from constants import API_URL, LANGUAGE_CODES, CUSTOM_CSS, CUSTOM_JS
 
-retry_button = False
-    
-def save_uploaded_file(uploaded_file):
-    """Save the uploaded file to a temporary file and return its path."""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        return tmp_file.name
-    
-def generate_transcript_html(transcript_words):
-    html = '<div>'
-    for word_data in transcript_words:
-        start_time_sec = word_data["start"] / 1000
-        html += f'<span id="word-{start_time_sec}" class="word">{word_data["text"]} </span>'
-    html += '</div>'
-    return html
+data = None
+err = None
+cancel_event = threading.Event()
 
-def generate_transcript_html_speaker(utterance):
-    html = '<div>'
-    for speaker_data in utterance:
-        html += f'<p><b> Speaker {speaker_data["speaker"]} </b></p>'
-        for word_data in speaker_data["words"]:
-            start_time_sec = word_data["start"] / 1000
-            html += f'<span id="word-{start_time_sec}" class="word">{word_data["text"]} </span>'
-    html += '</div>'
-    return html
+def process_request():
+    global data, err
+    data = None
+    err = None
+    cancel_event = threading.Event()
 
-custom_css = """
-<style>
-audio{
-    width: 100%;
-}
-.word {
-    position: relative;
-    padding: 2px 4px;
-    border-radius: 4px;
-    transition: background-color 0.1s ease;
-    display: inline-block;
-    font-family: 'Arial', sans-serif; /* Set your desired font family */
-    font-size: 16px; /* Set the font size */
-    color: rgb(49, 51, 63);
-}
-.highlight {
-    background-color: #2545d3;
-    color: white;
-}
-.container-transcript{
-    max-height : 600px;
-    overflow-y: auto;
-}
-</style>
-"""
+    def fetch_data_with_timeout():
+        global data, err
+        try:
+            data, err = fetch_data(
+                file_url,
+                activated_pii,
+                activated_speaker,
+                activated_dual,
+                activated_filter,
+                model_type,
+                language_code,
+                activated_sum,
+                activated_topic,
+                activated_auto_chapters,
+                activated_content,
+                activated_phrases,
+                activated_sentiment,
+                activated_entity
+            )
+        except Exception as e:
+            err = str(e)
+        if cancel_event.is_set():
+            data = None
+            err = "Request đã bị hủy."
 
-# Add JavaScript to handle audio playback and highlight the current word
-custom_js = """
-<script>
-function highlightCurrentWord(audio) {
-    const words = document.querySelectorAll('.word');
-    let currentWordIndex = 0;
+    request_thread = threading.Thread(target=fetch_data_with_timeout)
+    request_thread.start()
 
-    audio.addEventListener('timeupdate', () => {
-        const currentTime = audio.currentTime;
-        console.log(currentTime);
-        // Remove highlight from all words
-        words.forEach(word => word.classList.remove('highlight'));
+    with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
+        request_thread.join(timeout=120)
 
-        // Highlight the current word
-        for (let i = 0; i < words.length; i++) {
-            const wordElement = words[i];
-            const startTime = parseFloat(wordElement.id.split('-')[1]);
-            const endTime = (i < words.length - 1) ? parseFloat(words[i + 1].id.split('-')[1]) : audio.duration;
+    if request_thread.is_alive():
+        cancel_event.set()
+        st.write("Request đã hết thời gian chờ.")   
+        data = None
+        err = "Timeout"
 
-            if (currentTime >= startTime && currentTime < endTime) {
-                wordElement.classList.add('highlight');
-                break;
-            }
-        }
-    });
-}
+def display_results():
+    global data, err, cancel_event
 
-document.addEventListener('DOMContentLoaded', () => {
-    const audio = document.getElementsByTagName("audio");
-    highlightCurrentWord(audio[0]);
-});
-</script>
-"""
+    if err:
+        st.write(f"Lỗi khi gọi API: {err}")
+
+        col1, col2 = st.columns([2, 2])
+        with col1:
+            if st.button("Cancel", use_container_width=True):
+                st.write("Đã hủy yêu cầu.")
+                cancel_event.set()
+        with col2:
+            st.button("Retry", key="retry_button", use_container_width=True)
+                
+    else:
+        with left_paper:
+            st.write(
+                "<h5 style='color: #2545d3;'>Transcript</h5>",
+                unsafe_allow_html=True
+            )
+
+            if data:
+                if (activated_speaker or activated_dual) is not False:
+                    transcript_html = generate_transcript_html_speaker(data.get("utterance"))
+                    print (transcript_html)
+                else:
+                    transcript_html = generate_transcript_html(data.get("transcript_words"))
+                    
+                full_html = f"""
+                {CUSTOM_CSS}
+                <hr>
+                <audio controls>
+                    <source src="{audio_url}" type="audio/wav">
+                </audio>
+                <hr>
+                
+                <div class="container-transcript" style="font-size: 18px;">
+                    {transcript_html}
+                </div>
+                {CUSTOM_JS}
+                """
+                st.components.v1.html(full_html, height=800)
+                
+        if right_paper:            
+            with right_paper:
+                if data:
+                    if activated_sum:
+                        summary = get_transcript_options(data, "summary")
+                        with st.status("Summarization"):
+                            st.write(summary)
+                    if activated_topic:
+                        topics = get_transcript_options(data, "topic")
+                        with st.status("Topic Detection"):
+                            st.write(topics)
+                    if activated_auto_chapters:
+                        chapters = get_transcript_options(data, "chapter")
+                        with st.status("Auto Chapters"):
+                            st.write(chapters)
+                    if activated_content:
+                        content = get_transcript_options(data, "content")
+                        with st.status("Content Moderation"):
+                            st.write(content)
+                    if activated_phrases:
+                        phrases = get_transcript_options(data, "phrases")
+                        with st.status("Important Phrases"):
+                            st.write(phrases)
+                    if activated_sentiment:
+                        sentiment = get_transcript_options(data, "sentiment")
+                        with st.status("Sentiment Analysis"):
+                            st.write(sentiment)
+                    if activated_entity:
+                        entity = get_transcript_options(data, "entity")
+                        with st.status("Entity Detection"):
+                            st.write(entity)
+
+# Initialize session state variables
+if 'retry_button' not in st.session_state:
+    st.session_state.retry_button = False
+if 'model_type' not in st.session_state:
+    st.session_state.model_type = "best"
+if 'activated_sum' not in st.session_state:
+    st.session_state.activated_sum = False
+if 'activated_auto_chapters' not in st.session_state:
+    st.session_state.activated_auto_chapters = False
+if 'activated_dual_channel' not in st.session_state:
+    st.session_state.activated_dual_channel = False
 
 st.set_page_config(page_title="Streamline Analyst", page_icon=":rocket:", layout="wide")
 with open('styles.css', 'r', encoding='utf-8') as f:
@@ -132,35 +179,13 @@ with st.sidebar:
         st.write(f"Model type selected: **{st.session_state.model_type}**")
         model_type = st.session_state.model_type
         
-        language_codes = {
-            "Automatic Language Detection": "auto",
-            "Global English": "en",
-            "American English": "en_us",
-            "Australian English": "en_au",
-            "British English": "en_uk",
-            "Chinese": "zh",
-            "Dutch": "nl",
-            "Finnish": "fi",
-            "French": "fr",
-            "German": "de",
-            "Hindi": "hi",
-            "Italian": "it",
-            "Japanese": "ja",
-            "Korean": "ko",
-            "Polish": "pl",
-            "Portuguese": "pt",
-            "Russian": "ru",
-            "Spanish": "es",
-            "Turkish": "tr",
-            "Ukrainian": "uk",
-            "Vietnamese": "vi"
-        }
+        
         selected_language = st.selectbox(
             "Upload audio file to transcribe:",
-            language_codes.keys(),
+            LANGUAGE_CODES.keys(),
             key="method_language"
         )
-        language_code = language_codes[selected_language]
+        language_code = LANGUAGE_CODES[selected_language]
         st.write(f"Selected language code: **{language_code}**")
         st.divider()
         
@@ -231,140 +256,9 @@ with st.sidebar:
             submit_button = st.button("Transcribe File", disabled=uploaded_file is None)
             st.write('</div>', unsafe_allow_html=True)
 
-def process_request():
-    print("process_request")
-    global data, err
-    data = None
-    err = None
-    cancel_event = threading.Event()
-
-    def fetch_data_with_timeout():
-        global data, err
-        try:
-            data, err = fetch_data(
-                file_url,
-                activated_pii,
-                activated_speaker,
-                activated_dual,
-                activated_filter,
-                model_type,
-                language_code,
-                activated_sum,
-                activated_topic,
-                activated_auto_chapters,
-                activated_content,
-                activated_phrases,
-                activated_sentiment,
-                activated_entity
-            )
-        except Exception as e:
-            err = str(e)
-        if cancel_event.is_set():
-            data = None
-            err = "Request đã bị hủy."
-
-    request_thread = threading.Thread(target=fetch_data_with_timeout)
-    request_thread.start()
-
-    with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
-        request_thread.join(timeout=2)
-
-    if request_thread.is_alive():
-        cancel_event.set()
-        st.write("Request đã hết thời gian chờ.")   
-        data = None
-        err = "Timeout"
-
-def display_results():
-    global data, err
-    cancel_event = threading.Event()
-    if err:
-        st.write(f"Lỗi khi gọi API: {err}")
-
-        col1, col2 = st.columns([2, 2])
-        with col1:
-            if st.button("Cancel", use_container_width=True):
-                st.write("Đã hủy yêu cầu.")
-                cancel_event.set()
-
-        with col2:
-            retry_button = st.button("Retry", key="retry_button", use_container_width=True)
-            if retry_button:
-                print(err)
-                
-                st.write("Đang thử lại...")
-                # Reset lại data và err
-                data = None
-                err = None
-                # Gọi lại process_request và display_results
-                process_request()
-                display_results()
-                
-    else:
-        with left_paper:
-            st.write(
-                "<h5 style='color: #2545d3;'>Transcript</h5>",
-                unsafe_allow_html=True
-            )
-
-            if data:
-                if activated_speaker is not False:
-                    transcript_html = generate_transcript_html_speaker(data.get("utterance"))
-                    print (transcript_html)
-                else:
-                    transcript_html = generate_transcript_html(data.get("transcript_words"))
-                    
-                full_html = f"""
-                {custom_css}
-                <hr>
-                <audio controls>
-                    <source src="{audio_url}" type="audio/wav">
-                </audio>
-                <hr>
-                
-                <div class="container-transcript" style="font-size: 18px;">
-                    {transcript_html}
-                </div>
-                {custom_js}
-                """
-                # Display the transcript in Streamlit
-                st.components.v1.html(full_html, height=800)
-                
-        if right_paper:            
-            with right_paper:
-                if data:
-                    if activated_sum:
-                        summary = get_transcript_options(data, "summary")
-                        with st.status("Summarization"):
-                            st.write(summary)
-                    if activated_topic:
-                        topics = get_transcript_options(data, "topic")
-                        with st.status("Topic Detection"):
-                            st.write(topics)
-                    if activated_auto_chapters:
-                        chapters = get_transcript_options(data, "chapter")
-                        with st.status("Auto Chapters"):
-                            st.write(chapters)
-                    if activated_content:
-                        content = get_transcript_options(data, "content")
-                        with st.status("Content Moderation"):
-                            st.write(content)
-                    if activated_phrases:
-                        phrases = get_transcript_options(data, "phrases")
-                        with st.status("Important Phrases"):
-                            st.write(phrases)
-                    if activated_sentiment:
-                        sentiment = get_transcript_options(data, "sentiment")
-                        with st.status("Sentiment Analysis"):
-                            st.write(sentiment)
-                    if activated_entity:
-                        entity = get_transcript_options(data, "entity")
-                        with st.status("Entity Detection"):
-                            st.write(entity)
-
 # Main section
 with st.container():
-    if (submit_button or retry_button) and uploaded_file is not None:
+    if (submit_button or st.session_state.retry_button) and uploaded_file is not None:
         optional_selected = [activated_sum, activated_topic, activated_auto_chapters, activated_content,
                              activated_phrases, activated_sentiment, activated_entity]
         
@@ -378,26 +272,6 @@ with st.container():
 
         process_request()
         display_results()
-            
-        # with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
-        #     file_url = save_uploaded_file(uploaded_file)
-        #     data, err = fetch_data(file_url,
-        #                            activated_pii,
-        #                            activated_speaker,
-        #                            activated_dual,
-        #                            activated_filter,
-        #                            model_type,
-        #                            language_code,
-        #                            activated_sum, 
-        #                            activated_topic, 
-        #                            activated_auto_chapters, 
-        #                            activated_content, 
-        #                            activated_phrases,
-        #                            activated_sentiment,
-        #                            activated_entity
-        #                            )
-            # print(data.get("transcript_words"))
-            
     else:   
         st.write(
             "<h1 style='color: #2545d3;'>Try AssemblyAI's API in seconds</h1>",
