@@ -5,6 +5,8 @@ import tempfile
 from contextlib import nullcontext
 import threading
 from constants import API_URL
+
+retry_button = False
     
 def save_uploaded_file(uploaded_file):
     """Save the uploaded file to a temporary file and return its path."""
@@ -41,6 +43,9 @@ audio{
     border-radius: 4px;
     transition: background-color 0.1s ease;
     display: inline-block;
+    font-family: 'Arial', sans-serif; /* Set your desired font family */
+    font-size: 16px; /* Set the font size */
+    color: rgb(49, 51, 63);
 }
 .highlight {
     background-color: #2545d3;
@@ -226,143 +231,108 @@ with st.sidebar:
             submit_button = st.button("Transcribe File", disabled=uploaded_file is None)
             st.write('</div>', unsafe_allow_html=True)
 
-# Main section
-with st.container():
-    if submit_button and uploaded_file is not None:
-        # Determine column layout based on selected options
-        optional_selected = [activated_sum, activated_topic, activated_auto_chapters, activated_content,
-                             activated_phrases, activated_sentiment, activated_entity]
-        
-        if any(optional_selected):
-            # If any of the optional capabilities are selected except for the specific ones
-            left_paper, right_paper = st.columns([7, 3])
-        else:
-            # Default layout
-            left_paper = st.container()
-            right_paper = None
-            
-        file_url = save_uploaded_file(uploaded_file)
+def process_request():
+    print("process_request")
+    global data, err
+    data = None
+    err = None
+    cancel_event = threading.Event()
 
-        data = None
-        err = None
-        cancel_event = threading.Event()
-
-        def fetch_data_with_timeout():
-            global data, err  # Sử dụng biến toàn cục
-            try:
-                data, err = fetch_data(
-                    file_url,
-                    activated_pii,
-                    activated_speaker,
-                    activated_dual,
-                    activated_filter,
-                    model_type,
-                    language_code,
-                    activated_sum,
-                    activated_topic,
-                    activated_auto_chapters,
-                    activated_content,
-                    activated_phrases,
-                    activated_sentiment,
-                    activated_entity
-                )
-            except Exception as e:
-                err = str(e)
-            if cancel_event.is_set():
-                data = None
-                err = "Request đã bị hủy."
-
-        # Bắt đầu request trong một thread
-        request_thread = threading.Thread(target=fetch_data_with_timeout)
-        request_thread.start()
-
-        # Hiển thị spinner trong thời gian chờ
-        with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
-            request_thread.join(timeout=120)
-
-        # Xử lý kết quả hoặc timeout
-        if request_thread.is_alive():
-            cancel_event.set()
-            st.write("Request đã hết thời gian chờ.")
+    def fetch_data_with_timeout():
+        global data, err
+        try:
+            data, err = fetch_data(
+                file_url,
+                activated_pii,
+                activated_speaker,
+                activated_dual,
+                activated_filter,
+                model_type,
+                language_code,
+                activated_sum,
+                activated_topic,
+                activated_auto_chapters,
+                activated_content,
+                activated_phrases,
+                activated_sentiment,
+                activated_entity
+            )
+        except Exception as e:
+            err = str(e)
+        if cancel_event.is_set():
             data = None
-            err = "Timeout"
+            err = "Request đã bị hủy."
 
-            # Hiển thị các nút "Cancel" và "Retry"
-            col1, col2, = st.columns([2,2])
-            with col1:
-                if st.button("Cancel", use_container_width=True):
-                    st.write("Đã hủy yêu cầu.")
-                    cancel_event.set()  # Hủy request
-            with col2:
-                if st.button("Retry", use_container_width=True):
-                    st.write("Đang thử lại...")
-                    # Khởi động lại quy trình nếu muốn thử lại
-                    request_thread = threading.Thread(target=fetch_data_with_timeout)
-                    request_thread.start()
-                    with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
-                        request_thread.join(timeout=120)
+    request_thread = threading.Thread(target=fetch_data_with_timeout)
+    request_thread.start()
 
-                    if request_thread.is_alive():
-                        cancel_event.set()
-                        st.write("Request đã hết thời gian chờ.")
-                        data = None
-                        err = "Timeout"
+    with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
+        request_thread.join(timeout=2)
 
-        if err:
-            st.write(f"Lỗi khi gọi API: {err}")
-        elif data:
-            st.write("Kết quả từ API:", data)
-            
-        # with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
-        #     file_url = save_uploaded_file(uploaded_file)
-        #     data, err = fetch_data(file_url,
-        #                            activated_pii,
-        #                            activated_speaker,
-        #                            activated_dual,
-        #                            activated_filter,
-        #                            model_type,
-        #                            language_code,
-        #                            activated_sum, 
-        #                            activated_topic, 
-        #                            activated_auto_chapters, 
-        #                            activated_content, 
-        #                            activated_phrases,
-        #                            activated_sentiment,
-        #                            activated_entity
-        #                            )
-            # print(data.get("transcript_words"))
-            
-            if right_paper:
-                with left_paper:
-                    st.write(
-                        "<h5 style='color: #2545d3;'>Transcript</h5>",
-                        unsafe_allow_html=True
-                    )
+    if request_thread.is_alive():
+        cancel_event.set()
+        st.write("Request đã hết thời gian chờ.")   
+        data = None
+        err = "Timeout"
 
-                    if data:
-                        if activated_speaker is not False:
-                            transcript_html = generate_transcript_html_speaker(data.get("utterance"))
-                            print (transcript_html)
-                        else:
-                            transcript_html = generate_transcript_html(data.get("transcript_words"))
-                            
-                        full_html = f"""
-                        {custom_css}
-                        <hr>
-                        <audio controls>
-                            <source src="{audio_url}" type="audio/wav">
-                        </audio>
-                        <hr>
-                        
-                        <div class="container-transcript" style="font-size: 18px;">
-                            {transcript_html}
-                        </div>
-                        {custom_js}
-                        """
-                        # Display the transcript in Streamlit
-                        st.components.v1.html(full_html, height=800)
-                        
-                with right_paper:
+def display_results():
+    global data, err
+    cancel_event = threading.Event()
+    if err:
+        st.write(f"Lỗi khi gọi API: {err}")
+
+        col1, col2 = st.columns([2, 2])
+        with col1:
+            if st.button("Cancel", use_container_width=True):
+                st.write("Đã hủy yêu cầu.")
+                cancel_event.set()
+
+        with col2:
+            retry_button = st.button("Retry", key="retry_button", use_container_width=True)
+            if retry_button:
+                print(err)
+                
+                st.write("Đang thử lại...")
+                # Reset lại data và err
+                data = None
+                err = None
+                # Gọi lại process_request và display_results
+                process_request()
+                display_results()
+                
+    else:
+        with left_paper:
+            st.write(
+                "<h5 style='color: #2545d3;'>Transcript</h5>",
+                unsafe_allow_html=True
+            )
+
+            if data:
+                if activated_speaker is not False:
+                    transcript_html = generate_transcript_html_speaker(data.get("utterance"))
+                    print (transcript_html)
+                else:
+                    transcript_html = generate_transcript_html(data.get("transcript_words"))
+                    
+                full_html = f"""
+                {custom_css}
+                <hr>
+                <audio controls>
+                    <source src="{audio_url}" type="audio/wav">
+                </audio>
+                <hr>
+                
+                <div class="container-transcript" style="font-size: 18px;">
+                    {transcript_html}
+                </div>
+                {custom_js}
+                """
+                # Display the transcript in Streamlit
+                st.components.v1.html(full_html, height=800)
+                
+        if right_paper:            
+            with right_paper:
+                if data:
                     if activated_sum:
                         summary = get_transcript_options(data, "summary")
                         with st.status("Summarization"):
@@ -391,36 +361,43 @@ with st.container():
                         entity = get_transcript_options(data, "entity")
                         with st.status("Entity Detection"):
                             st.write(entity)
-            else:
-                with left_paper:
-                    st.write(
-                        "<h5 style='color: #2545d3;'>Transcript</h5>",
-                        unsafe_allow_html=True
-                    )
 
-                    if data:
-                        if activated_speaker is not False:
-                            transcript_html = generate_transcript_html_speaker(data.get("utterance"))
-                            print (transcript_html)
-                        else:
-                            transcript_html = generate_transcript_html(data.get("transcript_words"))
-                            
-                        full_html = f"""
-                        {custom_css}
-                        <hr>
-                        <audio controls>
-                            <source src="{audio_url}" type="audio/wav">
-                        </audio>
-                        <hr>
-                        
-                        <div class="container-transcript" style="font-size: 18px;">
-                            {transcript_html}
-                        </div>
-                        {custom_js}
-                        """
-                        # Display the transcript in Streamlit
-                        st.components.v1.html(full_html, height=800)
-                    
+# Main section
+with st.container():
+    if (submit_button or retry_button) and uploaded_file is not None:
+        optional_selected = [activated_sum, activated_topic, activated_auto_chapters, activated_content,
+                             activated_phrases, activated_sentiment, activated_entity]
+        
+        if any(optional_selected):
+            left_paper, right_paper = st.columns([7, 3])
+        else:
+            left_paper = st.container()
+            right_paper = None
+            
+        file_url = save_uploaded_file(uploaded_file)
+
+        process_request()
+        display_results()
+            
+        # with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
+        #     file_url = save_uploaded_file(uploaded_file)
+        #     data, err = fetch_data(file_url,
+        #                            activated_pii,
+        #                            activated_speaker,
+        #                            activated_dual,
+        #                            activated_filter,
+        #                            model_type,
+        #                            language_code,
+        #                            activated_sum, 
+        #                            activated_topic, 
+        #                            activated_auto_chapters, 
+        #                            activated_content, 
+        #                            activated_phrases,
+        #                            activated_sentiment,
+        #                            activated_entity
+        #                            )
+            # print(data.get("transcript_words"))
+            
     else:   
         st.write(
             "<h1 style='color: #2545d3;'>Try AssemblyAI's API in seconds</h1>",
