@@ -113,17 +113,19 @@ def generate_response(transcript: aai.Transcript, request: TranscriptionRequest)
 
     # Format the transcript based on speaker labels or dual-channel
     transcript_text = str(transcript.text)
-    if request.speaker_labels or request.dual_channel:
-        result = ""
-        for utterance in transcript.utterances:
-            result += f"**Speaker {utterance.speaker}:** {utterance.text}\n\n"
+    
+    # if request.speaker_labels or request.dual_channel:
+    #     result = ""
+    #     for utterance in transcript.utterances:
+    #         result += f"**Speaker {utterance.speaker}:** {utterance.text}\n\n"
         
-        transcript_text = result
+    #     transcript_text = result
 
     # Return the plain transcript with additional processing results
     return {
         "transcript": transcript_text,
         "transcript_words": transcript.words,
+        "utterance": transcript.utterances,
         "summary": transcript.summary if request.summarization else "",
         "topic": topics_str if request.iab_categories else "",
         "chapter": chapter_str if request.auto_chapters else "",

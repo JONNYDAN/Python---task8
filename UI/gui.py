@@ -2,8 +2,10 @@ import streamlit as st
 import os
 from execute import fetch_data, get_transcript, get_transcript_options
 import tempfile
+from contextlib import nullcontext
+import threading
+from constants import API_URL
     
-
 def save_uploaded_file(uploaded_file):
     """Save the uploaded file to a temporary file and return its path."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
@@ -12,14 +14,27 @@ def save_uploaded_file(uploaded_file):
     
 def generate_transcript_html(transcript_words):
     html = '<div>'
-    html += ''
     for word_data in transcript_words:
-        html += f'<span id="word-{word_data["start"]/1000}" class="word">{word_data["text"]} </span>'
+        start_time_sec = word_data["start"] / 1000
+        html += f'<span id="word-{start_time_sec}" class="word">{word_data["text"]} </span>'
+    html += '</div>'
+    return html
+
+def generate_transcript_html_speaker(utterance):
+    html = '<div>'
+    for speaker_data in utterance:
+        html += f'<p><b> Speaker {speaker_data["speaker"]} </b></p>'
+        for word_data in speaker_data["words"]:
+            start_time_sec = word_data["start"] / 1000
+            html += f'<span id="word-{start_time_sec}" class="word">{word_data["text"]} </span>'
     html += '</div>'
     return html
 
 custom_css = """
 <style>
+audio{
+    width: 100%;
+}
 .word {
     position: relative;
     padding: 2px 4px;
@@ -41,7 +56,6 @@ custom_css = """
 # Add JavaScript to handle audio playback and highlight the current word
 custom_js = """
 <script>
-console.log("abc")
 function highlightCurrentWord(audio) {
     const words = document.querySelectorAll('.word');
     let currentWordIndex = 0;
@@ -68,8 +82,6 @@ function highlightCurrentWord(audio) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const audio = document.getElementsByTagName("audio");
-    console.log("123")
-    console.log(audio[0])
     highlightCurrentWord(audio[0]);
 });
 </script>
@@ -88,7 +100,15 @@ with st.sidebar:
         # File uploader for MP4 or MP3
         uploaded_file = st.file_uploader("Upload audio file to transcribe (WAV/MP3):", 
                                          type=["wav", "mp3"], key="file_uploader", accept_multiple_files=False)
-        
+        if uploaded_file is not None:
+            # Lưu file vào thư mục tạm thời
+            file_path = os.path.join("../API/temp", uploaded_file.name)
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+            # Tạo URL cho file đã lưu
+            audio_url = f"{API_URL}/temp/{uploaded_file.name}"
+            
         st.write("Model Tier")
         
         left_model, right_model = st.columns([5, 5])
@@ -211,8 +231,7 @@ with st.container():
     if submit_button and uploaded_file is not None:
         # Determine column layout based on selected options
         optional_selected = [activated_sum, activated_topic, activated_auto_chapters, activated_content,
-                             activated_phrases, activated_sentiment, activated_entity, activated_pii, 
-                             activated_speaker, activated_dual, activated_filter]
+                             activated_phrases, activated_sentiment, activated_entity]
         
         if any(optional_selected):
             # If any of the optional capabilities are selected except for the specific ones
@@ -221,39 +240,127 @@ with st.container():
             # Default layout
             left_paper = st.container()
             right_paper = None
-        
-        with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
             
-            file_url = save_uploaded_file(uploaded_file)
-            data, err = fetch_data(file_url,
-                                   activated_pii,
-                                   activated_speaker,
-                                   activated_dual,
-                                   activated_filter,
-                                   model_type,
-                                   language_code,
-                                   activated_sum, 
-                                   activated_topic, 
-                                   activated_auto_chapters, 
-                                   activated_content, 
-                                   activated_phrases,
-                                   activated_sentiment,
-                                   activated_entity
-                                   )
-            print(data.get("transcript_words"))
+        file_url = save_uploaded_file(uploaded_file)
+
+        data = None
+        err = None
+        cancel_event = threading.Event()
+
+        def fetch_data_with_timeout():
+            global data, err  # Sử dụng biến toàn cục
+            try:
+                data, err = fetch_data(
+                    file_url,
+                    activated_pii,
+                    activated_speaker,
+                    activated_dual,
+                    activated_filter,
+                    model_type,
+                    language_code,
+                    activated_sum,
+                    activated_topic,
+                    activated_auto_chapters,
+                    activated_content,
+                    activated_phrases,
+                    activated_sentiment,
+                    activated_entity
+                )
+            except Exception as e:
+                err = str(e)
+            if cancel_event.is_set():
+                data = None
+                err = "Request đã bị hủy."
+
+        # Bắt đầu request trong một thread
+        request_thread = threading.Thread(target=fetch_data_with_timeout)
+        request_thread.start()
+
+        # Hiển thị spinner trong thời gian chờ
+        with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
+            request_thread.join(timeout=120)
+
+        # Xử lý kết quả hoặc timeout
+        if request_thread.is_alive():
+            cancel_event.set()
+            st.write("Request đã hết thời gian chờ.")
+            data = None
+            err = "Timeout"
+
+            # Hiển thị các nút "Cancel" và "Retry"
+            col1, col2, = st.columns([2,2])
+            with col1:
+                if st.button("Cancel", use_container_width=True):
+                    st.write("Đã hủy yêu cầu.")
+                    cancel_event.set()  # Hủy request
+            with col2:
+                if st.button("Retry", use_container_width=True):
+                    st.write("Đang thử lại...")
+                    # Khởi động lại quy trình nếu muốn thử lại
+                    request_thread = threading.Thread(target=fetch_data_with_timeout)
+                    request_thread.start()
+                    with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
+                        request_thread.join(timeout=120)
+
+                    if request_thread.is_alive():
+                        cancel_event.set()
+                        st.write("Request đã hết thời gian chờ.")
+                        data = None
+                        err = "Timeout"
+
+        if err:
+            st.write(f"Lỗi khi gọi API: {err}")
+        elif data:
+            st.write("Kết quả từ API:", data)
+            
+        # with st.spinner('We’re running your file through our models. Please wait for a couple of minutes...'):
+        #     file_url = save_uploaded_file(uploaded_file)
+        #     data, err = fetch_data(file_url,
+        #                            activated_pii,
+        #                            activated_speaker,
+        #                            activated_dual,
+        #                            activated_filter,
+        #                            model_type,
+        #                            language_code,
+        #                            activated_sum, 
+        #                            activated_topic, 
+        #                            activated_auto_chapters, 
+        #                            activated_content, 
+        #                            activated_phrases,
+        #                            activated_sentiment,
+        #                            activated_entity
+        #                            )
+            # print(data.get("transcript_words"))
             
             if right_paper:
                 with left_paper:
-                    
-                    st.divider()
-                    st.audio(uploaded_file, format="audio/mpeg")
-                    st.divider()
+                    st.write(
+                        "<h5 style='color: #2545d3;'>Transcript</h5>",
+                        unsafe_allow_html=True
+                    )
 
                     if data:
-                        transcript = get_transcript(data)
-                        st.write(transcript)
-                    else:
-                        st.error(f"Error fetching data: {err}")
+                        if activated_speaker is not False:
+                            transcript_html = generate_transcript_html_speaker(data.get("utterance"))
+                            print (transcript_html)
+                        else:
+                            transcript_html = generate_transcript_html(data.get("transcript_words"))
+                            
+                        full_html = f"""
+                        {custom_css}
+                        <hr>
+                        <audio controls>
+                            <source src="{audio_url}" type="audio/wav">
+                        </audio>
+                        <hr>
+                        
+                        <div class="container-transcript" style="font-size: 18px;">
+                            {transcript_html}
+                        </div>
+                        {custom_js}
+                        """
+                        # Display the transcript in Streamlit
+                        st.components.v1.html(full_html, height=800)
                         
                 with right_paper:
                     if activated_sum:
@@ -286,28 +393,33 @@ with st.container():
                             st.write(entity)
             else:
                 with left_paper:
-                    # st.divider()
-                    # st.audio(uploaded_file, format="audio/mpeg")
-                    # st.divider()
+                    st.write(
+                        "<h5 style='color: #2545d3;'>Transcript</h5>",
+                        unsafe_allow_html=True
+                    )
 
                     if data:
-                        # transcript = get_transcript(data)
-                        # st.write(transcript)
-                        
-                        transcript_html = generate_transcript_html(data.get("transcript_words"))
+                        if activated_speaker is not False:
+                            transcript_html = generate_transcript_html_speaker(data.get("utterance"))
+                            print (transcript_html)
+                        else:
+                            transcript_html = generate_transcript_html(data.get("transcript_words"))
+                            
                         full_html = f"""
                         {custom_css}
+                        <hr>
                         <audio controls>
-                        <source src="{file_url}" type="audio/wav">
-                        Your browser does not support the audio element.
+                            <source src="{audio_url}" type="audio/wav">
                         </audio>
+                        <hr>
+                        
                         <div class="container-transcript" style="font-size: 18px;">
                             {transcript_html}
                         </div>
                         {custom_js}
                         """
                         # Display the transcript in Streamlit
-                        st.components.v1.html(full_html, height=1000)
+                        st.components.v1.html(full_html, height=800)
                     
     else:   
         st.write(
