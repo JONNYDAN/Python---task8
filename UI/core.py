@@ -1,6 +1,8 @@
 import requests
 import streamlit as st
 import tempfile
+import os
+import time
 from constants import API_URL
 
 def fetch_data(audio_str,
@@ -35,6 +37,21 @@ def fetch_data(audio_str,
             "auto_highlights": auto_highlights,
             "sentiment_analysis": sentiment_analysis,
             "entity_detection": entity_detection
+        }
+    )
+    
+    try:
+        response.raise_for_status()
+        data = response.json()
+        return data, None
+    except Exception as err:
+        return None, err
+    
+def fetch_data_download(audio_str):
+    response = requests.post(
+        f"{API_URL}/download", 
+        json={
+            "audio_url": audio_str,
         }
     )
     
@@ -81,4 +98,23 @@ def generate_transcript_html_speaker(utterance):
             html += f'<span id="word-{start_time_sec}" class="word">{word_data["text"]} </span>'
     html += '</div>'
     return html
+
+def generate_srt(srt_text):
+    return srt_text
+
+def generate_vtt(vtt_text):
+    return vtt_text
+
+def clean_files_after_setup_time(folder_path, setup_time_in_seconds):
+    current_time = time.time()
+
+    for file_name in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, file_name)
+
+        if os.path.isfile(file_path):
+            file_mod_time = os.path.getmtime(file_path)
+
+            if current_time - file_mod_time > setup_time_in_seconds:
+                os.remove(file_path)
+
 

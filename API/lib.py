@@ -3,8 +3,6 @@ import assemblyai as aai
 import re 
 
 
-
-
 def generate_config_from_request(request: TranscriptionRequest) -> aai.TranscriptionConfig:
     # Determine the speech model based on the user's selection
     speech_model = aai.SpeechModel.best if request.model_type == "best" else aai.SpeechModel.nano
@@ -46,6 +44,16 @@ def generate_config_from_request(request: TranscriptionRequest) -> aai.Transcrip
         )
 
     return config
+
+def generate_response_download(transcript: aai.Transcript) -> dict:
+    srt = transcript.export_subtitles_srt()
+
+    vtt = transcript.export_subtitles_vtt()
+    
+    return {
+        "srt": srt,
+        "vtt": vtt,
+    }
 
 def generate_response(transcript: aai.Transcript, request: TranscriptionRequest) -> dict:
     # Initialize result containers
@@ -132,7 +140,7 @@ def generate_response(transcript: aai.Transcript, request: TranscriptionRequest)
         "content": content_str if request.content_safety else "",
         "phrases": phrase_str if request.auto_highlights else "",
         "sentiment": sentiment_str if request.sentiment_analysis else "",
-        "entity": entity_str if request.entity_detection else ""
+        "entity": entity_str if request.entity_detection else "",
     }
 
   

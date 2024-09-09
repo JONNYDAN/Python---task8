@@ -1,22 +1,30 @@
 import streamlit as st
 import os
-from core import fetch_data, get_transcript, get_transcript_options, save_uploaded_file, generate_transcript_html, generate_transcript_html_speaker
+from core import fetch_data, fetch_data_download, get_transcript, get_transcript_options, save_uploaded_file, generate_transcript_html, generate_transcript_html_speaker, generate_srt, generate_vtt, clean_files_after_setup_time
 from contextlib import nullcontext
 import threading
 from constants import API_URL, LANGUAGE_CODES, CUSTOM_CSS, CUSTOM_JS
 
+URL_TEMP = "../API/temp"
+
 data = None
 err = None
+data_down = None
+err_down = None
 cancel_event = threading.Event()
 
+clean_files_after_setup_time(URL_TEMP, 250) #Xét theo giây
+
 def process_request():
-    global data, err
+    global data, err, data_down, err_down
     data = None
     err = None
+    data_down = None
+    err_down = None
     cancel_event = threading.Event()
 
     def fetch_data_with_timeout():
-        global data, err
+        global data, err, data_down, err_down
         try:
             data, err = fetch_data(
                 file_url,
@@ -33,6 +41,9 @@ def process_request():
                 activated_phrases,
                 activated_sentiment,
                 activated_entity
+            )
+            data_down, err_down = fetch_data_download(
+                file_url
             )
         except Exception as e:
             err = str(e)
@@ -52,8 +63,15 @@ def process_request():
         data = None
         err = "Timeout"
 
+if 'download_clicked' not in st.session_state:
+    st.session_state.download_clicked = False
+
+# Function to handle download button click
+def on_download_click():
+    st.session_state.download_clicked = True
+
 def display_results():
-    global data, err, cancel_event
+    global data, err, data_down, err_down, cancel_event
 
     if err:
         st.write(f"Lỗi khi gọi API: {err}")
@@ -72,8 +90,38 @@ def display_results():
                 "<h5 style='color: #2545d3;'>Transcript</h5>",
                 unsafe_allow_html=True
             )
+            if data_down:
+                left_down, right_down = st.columns([2, 8])
+                with left_down:
+                    # Lựa chọn định dạng tải xuống
+                    selected_format = st.selectbox(
+                        "Please select download format:",
+                        ("SRT", "VTT"),
+                        key="method_format"
+                    )
 
+                    # Giả sử bạn đã có các hàm để tạo nội dung SRT và VTT
+                    # if selected_format == "SRT":
+                    data_content = generate_srt(data_down.get("srt"))
+                    name_file = "subtitles.srt"
+                    
+                    if selected_format == "VTT":
+                        data_content = generate_vtt(data_down.get("vtt"))
+                        name_file = "subtitles.vtt"
+                        
+                    # Tạo nút tải xuống với định dạng tương ứng
+                    st.download_button(
+                        label="Download File",
+                        data=data_content,
+                        file_name=name_file,
+                        mime="text/plain",
+                        on_click=on_download_click
+                    )
+                with right_down:
+                    st.write("")
+            
             if data:
+                
                 if (activated_speaker or activated_dual) is not False:
                     transcript_html = generate_transcript_html_speaker(data.get("utterance"))
                     print (transcript_html)
@@ -154,7 +202,7 @@ with st.sidebar:
                                          type=["wav", "mp3"], key="file_uploader", accept_multiple_files=False)
         if uploaded_file is not None:
             # Lưu file vào thư mục tạm thời
-            file_path = os.path.join("../API/temp", uploaded_file.name)
+            file_path = os.path.join(URL_TEMP, uploaded_file.name)
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
@@ -258,9 +306,13 @@ with st.sidebar:
 
 # Main section
 with st.container():
-    if (submit_button or st.session_state.retry_button) and uploaded_file is not None:
+    # if st.session_state.download_clicked:
+    #     st.write('Download button clicked!')
+    #     display_results()
+    # else:
+    if (submit_button or st.session_state.retry_button or st.session_state.download_clicked) and uploaded_file is not None :
         optional_selected = [activated_sum, activated_topic, activated_auto_chapters, activated_content,
-                             activated_phrases, activated_sentiment, activated_entity]
+                            activated_phrases, activated_sentiment, activated_entity]
         
         if any(optional_selected):
             left_paper, right_paper = st.columns([7, 3])
@@ -272,7 +324,8 @@ with st.container():
 
         process_request()
         display_results()
-    else:   
+    
+    else:
         st.write(
             "<h1 style='color: #2545d3;'>Try AssemblyAI's API in seconds</h1>",
             unsafe_allow_html=True

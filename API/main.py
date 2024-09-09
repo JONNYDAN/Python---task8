@@ -1,7 +1,7 @@
 import assemblyai as aai
 from fastapi import FastAPI, HTTPException
 from model import TranscriptionRequest
-from lib import generate_config_from_request, generate_response
+from lib import generate_config_from_request, generate_response, generate_response_download
 from starlette.staticfiles import StaticFiles
 app = FastAPI()
 
@@ -32,3 +32,17 @@ async def parse(request: TranscriptionRequest):
         return response
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/download")
+async def download(request: TranscriptionRequest):
+    transcriber = aai.Transcriber()
+    try:
+        # Transcribe the audio using the provided configuration
+        transcript = transcriber.transcribe(request.audio_url)
+        
+        response = generate_response_download(transcript)
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
