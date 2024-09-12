@@ -1,6 +1,8 @@
 from model import TranscriptionRequest
 import assemblyai as aai
 import re 
+import time
+import os
 
 
 def generate_config_from_request(request: TranscriptionRequest) -> aai.TranscriptionConfig:
@@ -143,4 +145,14 @@ def generate_response(transcript: aai.Transcript, request: TranscriptionRequest)
         "entity": entity_str if request.entity_detection else "",
     }
 
-  
+def clean_files_after_setup_time(folder_path, setup_time_in_seconds):
+    current_time = time.time()
+
+    for file_name in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, file_name)
+
+        if os.path.isfile(file_path):
+            file_mod_time = os.path.getmtime(file_path)
+
+            if current_time - file_mod_time > setup_time_in_seconds:
+                os.remove(file_path)  

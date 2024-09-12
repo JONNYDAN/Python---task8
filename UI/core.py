@@ -105,16 +105,22 @@ def generate_srt(srt_text):
 def generate_vtt(vtt_text):
     return vtt_text
 
-def clean_files_after_setup_time(folder_path, setup_time_in_seconds):
-    current_time = time.time()
+def update_summarization():
+                st.session_state.activated_sum = not st.session_state.activated_sum
+                if st.session_state.activated_sum:
+                    st.session_state.activated_auto_chapters = False
 
-    for file_name in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file_name)
+def update_auto_chapters():
+    st.session_state.activated_auto_chapters = not st.session_state.activated_auto_chapters
+    if st.session_state.activated_auto_chapters:
+        st.session_state.activated_sum = False
+        
+def update_dual_channel():
+    st.session_state.activated_dual = not st.session_state.activated_dual
+    if st.session_state.activated_dual:
+        st.session_state.activated_speaker = False
 
-        if os.path.isfile(file_path):
-            file_mod_time = os.path.getmtime(file_path)
-
-            if current_time - file_mod_time > setup_time_in_seconds:
-                os.remove(file_path)
-
-
+def update_speaker_labels():
+    st.session_state.activated_speaker = not st.session_state.activated_speaker
+    if st.session_state.activated_speaker:
+        st.session_state.activated_dual = False
